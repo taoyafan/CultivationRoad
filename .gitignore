@@ -1,0 +1,71 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]serPrefs/
+UserSettings/
+
+# Visual Studio / MonoDevelop
+.vs/
+.vsconfig
+*.sln
+*.csproj
+*.unityproj
+*.user
+*.userosscache
+*.sln.docstates
+
+# Plastic SCM
+.plastic/
+ignore.conf
+
+# Visual Studio Code
+.vscode/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Unity specific
+ExportedObj/
+*.app
+*.mdb
+*.pdb
+*.dll
+*.so
+*.dylib
+
+# Mono
+*.pidb
+*.pidb.lock
+
+# ReSharper
+_ReSharper*/
+*.ReSharper.user
+*.ReSharper.user.cache
+
+# Thumbnails
+._*
+
+# OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Package data (可选)
+# *.unitypackage
