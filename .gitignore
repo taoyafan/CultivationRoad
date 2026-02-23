@@ -43,11 +43,13 @@ x86/
 # Unity specific
 ExportedObj/
 *.app
-*.mdb
 *.pdb
-*.dll
 *.so
 *.dylib
+
+# DOTween (keep dll/mdb for others to use)
+!Assets/Plugins/Demigiant/**/*.dll
+!Assets/Plugins/Demigiant/**/*.mdb
 
 # Mono
 *.pidb
