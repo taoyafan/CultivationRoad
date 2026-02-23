@@ -13,23 +13,20 @@ MonoBehaviour:
   m_Name: Shield
   m_EditorClassIdentifier: 
   <Image>k__BackingField: {fileID: 21300000, guid: cbcc2a462c0217447b4e75df0329905f, type: 3}
-  <Health>k__BackingField: 1
+  <Health>k__BackingField: 100
   <Deck>k__BackingField:
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
+  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
   - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
   - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
   - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
   - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
   - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
-  - {fileID: 11400000, guid: 03dad32dcfc9c5646a81c92750394dd6, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
-  - {fileID: 11400000, guid: e64fb551252ec984492bd624a2e152d8, type: 2}
   <Strategy>k__BackingField:
     rid: 816964096991690752
   references:

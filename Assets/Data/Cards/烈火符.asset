@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a406e329a587ffb4c9ee78886a65503a, type: 3}
   m_Name: "\u70C8\u706B\u7B26"
   m_EditorClassIdentifier: 
-  <Description>k__BackingField: "\u5355\u6B2115\u4F24\u5BB3"
+  <Description>k__BackingField: "\u5355\u6B2125\u4F24\u5BB3"
   <Mana>k__BackingField: 24
   <MaxHealth>k__BackingField: 1
   <CastTime>k__BackingField: 3

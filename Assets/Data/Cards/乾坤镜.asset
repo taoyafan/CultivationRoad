@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a406e329a587ffb4c9ee78886a65503a, type: 3}
   m_Name: "\u4E7E\u5764\u955C"
   m_EditorClassIdentifier: 
-  <Description>k__BackingField: "\u6BCF5\u79D2\u5BF9\u76EE\u6807\u9020\u62106\u70B9\u4F24\u5BB3"
+  <Description>k__BackingField: "\u6BCF3\u79D2\u5BF9\u76EE\u6807\u9020\u621011\u70B9\u4F24\u5BB3"
   <Mana>k__BackingField: 24
-  <MaxHealth>k__BackingField: 35
+  <MaxHealth>k__BackingField: 30
   <CastTime>k__BackingField: 3
   <Image>k__BackingField: {fileID: 21300000, guid: 0bf3911dcd9fb694ea62dba75623e990, type: 3}
   <ManualTargetEffect>k__BackingField:
