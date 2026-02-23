@@ -48,8 +48,14 @@ _Scripts/
 1. 创建继承自 `GameAction` 的具体动作类
 2. 通过 `ActionSystem.AttachPerformer<T>(performer)` 注册动作处理器
 3. 通过 `ActionSystem.Instance.Perform(action)` 执行动作
-4. 系统按顺序执行预反应、动作处理器和后反应
+4. 系统按顺序执行预反应(PreReactions)、动作处理器(Performers)和后反应(PostReactions)
 5. 支持使用协程等待动作执行完成
+6. 通过 `AddReaction` 添加的子动作会在当前动作的 Reaction 阶段执行
+
+**Reaction 阶段说明：**
+- `PreReactions`：在 Performer 执行前运行，用于预处理（如护盾吸收伤害）
+- `PerformReactions`：在 Performer 执行过程中添加的子动作（如 DealDamageGA 添加 KillEnemyGA）
+- `PostReactions`：在 Performer 执行后运行，用于后处理（如攻击者返回原位）
 
 #### 2. 时间系统 (Time System)
 
@@ -162,6 +168,12 @@ _Scripts/
 
 多个核心系统（如 `ActionSystem` 和 `TimeSystem`）采用单例模式实现，确保全局只有一个实例，便于访问和管理。
 
+**核心特性：**
+- 继承 `Singleton<T>` 基类
+- 场景切换时自动销毁和重建
+- 通过反射自动查找为 null 的 SerializeField 引用（`AutoFindSerializedFields`）
+- 支持动态创建和查找已有实例
+
 ### 2. 事件驱动模式 (Event-Driven)
 
 动作系统基于事件驱动架构，通过 `GameAction` 作为事件载体，实现组件间的解耦通信。
@@ -177,6 +189,39 @@ _Scripts/
 ### 5. 策略模式 (Strategy Pattern)
 
 敌人策略系统采用策略模式设计，允许动态切换敌人的AI行为策略。
+
+### 6. 场景系统 (Scene System)
+
+游戏包含多个场景，通过场景切换实现不同的游戏状态。
+
+**核心组件：**
+- `BattleScene` - 战斗场景，主游戏界面
+- `GameVictoryScene` - 胜利场景，玩家获胜后显示
+- `GameDefeatScene` - 失败场景，玩家失败后显示
+
+**场景切换机制：**
+- 通过 `SceneChangeGA` 动作进行场景切换，实现解耦
+- 使用 `WinGameGA` 动作触发胜利场景切换
+- 使用 `LoseGameGA` 动作触发失败场景切换
+- 战斗结束时自动恢复时间（通过 `ResumeTimeGA`）
+- 返回按钮使用 `ReturnButton` 脚本实现返回战斗场景
+
+**战斗结束流程：**
+1. 触发 `WinGameGA` 或 `LoseGameGA`
+2. 清空时间系统动作，重置游戏状态
+3. 添加 `ResumeTimeGA` 恢复时间
+4. 添加 `SceneChangeGA` 延迟切换场景
+5. 场景切换前确保 DOTween 动画完成（通过 `OnDestroy` 和 `DOKill`）
+
+**DOTween 清理规范：**
+- 在 `RemoveEnemy` 中等待动画完成后调用 `DOKill`
+- 在 `Damageable` 基类中重写 `OnDestroy` 自动清理 tween
+- 销毁对象前确保所有 tween 已完成或已 kill
+
+**工作流程：**
+1. 战斗胜利时触发 `WinGameGA` → 执行 SceneChangeGA("GameVictoryScene")
+2. 战斗失败时触发 `LoseGameGA` → 执行 SceneChangeGA("GameDefeatScene")
+3. 点击返回按钮 → 切换回 BattleScene
 
 **实现方式：**
 - **策略接口**：`IEnemyStrategy` 定义了统一的策略接口
@@ -228,6 +273,12 @@ _Scripts/
    - 护盾效果会吸收一定比例的伤害
    - 灼烧效果会在特定时机造成持续伤害
 
+**护盾系统说明：**
+- `ArmorStatus` 定义护盾的吸收比例（默认 80%）
+- `ProtectBeforeDamage` (PRE Reaction)：护盾移动到目标位置，计算吸收伤害，创建护盾受伤的 DealDamageGA
+- `ProtectAfterDamage` (POST Reaction)：护盾返回原位
+- 护盾受伤可能触发连锁反应（护盾死亡 → DestroyCardViewGA）
+
 ### 敌人策略系统工作流程
 
 1. **策略选择阶段**：
@@ -250,8 +301,10 @@ _Scripts/
 1. **代码风格**：采用 PascalCase 命名类和方法，camelCase 命名变量
 2. **模块化设计**：每个功能模块独立封装，降低耦合度
 3. **单例使用**：仅核心系统使用单例，其他组件通过依赖注入获取引用
-4. **动作系统使用**：所有游戏事件和交互必须通过动作系统处理
-5. **时间管理**：需要计时的操作必须通过时间系统管理
+4. **单例设计**：所有单例继承 `Singleton<T>` 基类，支持场景切换时自动销毁和重建；通过反射自动查找为 null 的 SerializeField 引用
+5. **动作系统使用**：所有游戏事件和交互必须通过动作系统处理
+6. **时间管理**：需要计时的操作必须通过时间系统管理
+7. **空值检查**：对于可能被销毁的对象（如场景切换后），使用 null 检查或 try-catch 防止 MissingReferenceException
 
 ## 扩展建议
 
@@ -259,6 +312,7 @@ _Scripts/
 2. **添加新效果**：继承 `Effect` 类实现新的效果逻辑
 3. **添加新卡牌**：创建新的 `CardData` 资源并配置相应的效果
 4. **扩展时间系统**：可以添加时间流速控制、暂停状态保存等功能
+5. **添加新场景**：可以添加新的场景（如主菜单、设置界面等），参考现有的场景系统实现
 
 ## 总结
 
