@@ -1,319 +1,444 @@
-# Cultivation Road 项目架构
+# Cultivation Road 战斗系统架构
 
-## 项目概述
+## 整体架构
 
-Cultivation Road 是一款基于 Unity 开发的卡牌战斗游戏，采用模块化架构设计，包含完整的动作系统、时间系统和卡牌系统。
-
-## 文档结构
-
-项目的核心代码位于 `Assets/_Scripts` 目录下，采用功能模块化组织：
+游戏采用**事件驱动架构**，核心是**时间系统(TimeSystem)** 和 **动作系统(ActionSystem)**。
 
 ```
-_Scripts/
-├── Creators/          # 视图创建器，负责动态生成游戏对象视图
-├── Data/              # 数据模型，定义游戏核心数据结构
-├── Effects/           # 效果实现，卡牌和技能的具体效果
-├── Enums/             # 枚举类型，定义各种状态和类型
-├── Extensions/        # 扩展方法，增强现有类型功能
-├── GameActions/       # 游戏动作，定义所有游戏事件和交互
-├── General/           # 通用系统和工具
-│   ├── ActionSystem/  # 动作系统核心实现
-│   └── Util/          # 通用工具类
-├── Interfaces/        # 接口定义，规范组件行为
-├── Models/            # 业务模型，游戏核心逻辑
-├── PerkConditions/    # 天赋条件，定义天赋激活条件
-├── Systems/           # 游戏系统，管理游戏核心机制
-├── TargetModes/       # 目标模式，定义技能和卡牌的目标选择
-└── Views/             # 视图组件，负责游戏界面显示
+玩家操作/系统事件
+    ↓
+创建 GameAction
+    ↓
+TimeSystem.AddAction(action, countdown)  ← 所有动作先进入时间系统
+    ↓
+TimeSystem 执行队列（倒计时结束）
+    ↓
+ActionSystem.PerformAndWait(action)     ← 送入动作系统
+    ↓
+ActionSystem.Flow()
+    ├─ PreReactions   (预处理)
+    ├─ Performer      (执行动作)
+    ├─ PerformReactions  (子动作，由AddReaction添加)
+    └─ PostReactions  (后处理)
 ```
 
-### 核心模块说明
+---
 
-#### 1. 动作系统 (Action System)
+## 目录结构
 
-动作系统是游戏的核心事件处理机制，基于事件驱动架构，允许游戏组件通过注册和触发动作进行通信。
+```
+Assets/_Scripts/BattleScene/
+├── GameActions/        # 动作定义（What: 要做什么）
+├── General/            # 核心框架
+│   ├── ActionSystem/ # 动作系统
+│   └── Util/          # 工具类
+├── Systems/            # 系统处理器（How: 怎么做）
+├── Effects/            # 卡牌效果定义
+├── Models/             # 业务模型
+├── Views/              # 视图组件
+├── Data/               # 数据资源
+├── Interfaces/         # 接口定义
+├── StatusEffects/      # 状态效果实现
+├── Strategies/         # 敌人AI策略
+├── TargetModes/        # 目标选择模式
+├── Creators/           # 对象创建器
+├── UI/                 # UI组件
+├── Enums/              # 枚举定义
+├── Extensions/         # 扩展方法
+└── PerkConditions/    # 天赋条件
+```
 
-**核心组件：**
-- `GameAction` - 所有游戏动作的基类，定义了动作的生命周期
-- `ActionSystem` - 动作系统的核心管理器，负责动作的执行和订阅
-- `ReactionTiming` - 定义动作反应的时机（PRE/POST）
+---
 
-**主要功能：**
-- 动作的执行和订阅机制
-- 支持动作的预反应（PreReactions）、执行反应（PerformReactions）和后反应（PostReactions）
-- 允许通过 `AttachPerformer` 注册动作处理器
-- 支持同步和异步执行动作（`Perform` 和 `PerformAndWait` 方法）
+## 核心概念
 
-**工作流程：**
-1. 创建继承自 `GameAction` 的具体动作类
-2. 通过 `ActionSystem.AttachPerformer<T>(performer)` 注册动作处理器
-3. 通过 `ActionSystem.Instance.Perform(action)` 执行动作
-4. 系统按顺序执行预反应(PreReactions)、动作处理器(Performers)和后反应(PostReactions)
-5. 支持使用协程等待动作执行完成
-6. 通过 `AddReaction` 添加的子动作会在当前动作的 Reaction 阶段执行
+### 1. TimeSystem（时间系统）
 
-**Reaction 阶段说明：**
-- `PreReactions`：在 Performer 执行前运行，用于预处理（如护盾吸收伤害）
-- `PerformReactions`：在 Performer 执行过程中添加的子动作（如 DealDamageGA 添加 KillEnemyGA）
-- `PostReactions`：在 Performer 执行后运行，用于后处理（如攻击者返回原位）
+**职责：** 管理带倒计时的动作队列，实现回合制战斗
 
-#### 2. 时间系统 (Time System)
+**核心流程：**
+```csharp
+// 1. 添加动作（倒计时 = 释放时间）
+TimeSystem.Instance.AddAction(new CastSuccessGA(card), card.CastTime);
 
-时间系统管理游戏中所有需要计时执行的动作，实现了一个基于倒计时的动作队列。
+// 2. TimeSystem.Update() 每帧减少倒计时
 
-**核心功能：**
-- 管理带倒计时的 `GameAction` 队列
-- 按倒计时时间自动排序动作
-- 支持手动暂停/恢复时间流
-- 在执行动作时自动暂停时间，动作完成后恢复
-- 支持通过 `PauseTimeGA` 动作暂停时间
-- 实现了动作的顺序执行，使用协程等待每个动作完成
+// 3. 倒计时结束，执行动作
+private IEnumerator ExecuteAction()
+{
+    Pause();  // 先暂停
+    yield return ActionSystem.PerformAndWait(action);  // 执行
+    // 检查是否需要恢复
+    if (!needPaused) Resume();
+}
+```
 
-**工作流程：**
-1. 通过 `TimeSystem.Instance.AddAction(action, countdown)` 添加带倒计时的动作
-2. 系统按倒计时排序动作队列
-3. 当动作倒计时结束时，系统暂停时间并执行动作
-4. 支持使用 `PerformAndWait` 确保动作按顺序执行
-5. 动作执行完成后恢复时间流
+**代码位置：** `Assets/_Scripts/BattleScene/Systems/TimeSystem.cs`
 
-#### 3. 卡牌系统 (Card System)
+---
 
-卡牌系统是游戏的核心玩法机制，包括卡牌数据、模型和视图。
+### 2. ActionSystem（动作系统）
 
-**核心组件：**
-- `CardData` - 卡牌数据模型，定义卡牌的基本属性和效果
-- `Card` - 卡牌业务模型，管理卡牌的状态和行为
-- `CardView` - 卡牌视图组件，负责卡牌的视觉表现
-- `CardStatus` - 定义卡牌的各种状态（如 InHand、Casting、CastSuccess 等）
+**职责：** 执行具体的动作逻辑
 
-**主要功能：**
-- 支持卡牌的绘制、使用、激活等操作
-- 实现了卡牌的释放时间（CastTime）机制
-- 支持卡牌效果的链式执行
-- 提供了完整的卡牌状态管理
+**执行流程（Flow 方法）：**
+```
+1. PreReactions   → 预处理（护盾吸收伤害）
+2. Performer     → 执行动作本身（造成伤害）
+3. PerformReactions → 子动作（Performer中通过AddReaction添加）
+4. PostReactions → 后处理（攻击者返回原位）
+```
 
-#### 4. 效果系统 (Effect System)
+**代码位置：** `Assets/_Scripts/BattleScene/General/ActionSystem/ActionSystem.cs`
 
-效果系统定义了游戏中所有可执行的效果，如伤害、治疗、状态效果等。
+---
 
-**核心组件：**
-- `Effect` - 所有效果的基类
-- 具体效果类（如 `DealDamageEffect`、`DrawCardsEffect`、`AddStatusEffectEffect` 等）
+### 3. GameAction（动作）
 
-**主要功能：**
-- 定义各种游戏效果的具体实现
-- 支持效果的参数化配置
-- 提供效果的执行和管理机制
-- 支持效果的链式执行（通过 `GetNextEffect` 方法）
+**定义：** 所有游戏事件的载体
 
-#### 5. 状态效果系统 (Status Effect System)
+**代码位置：** `Assets/_Scripts/BattleScene/GameActions/`
 
-状态效果系统管理游戏中各种状态效果，如护盾、灼烧等持续效果。
+---
 
-**核心组件：**
-- `StatusEffect` - 所有状态效果的基类
-- 具体状态效果类（如 `ArmorStatus`、`BurnStatus` 等）
-- `StatusEffectSystem` - 状态效果系统的管理器
-- `StatusEffectsUI` - 状态效果UI组件
+### 4. Performer（处理器）
 
-**主要功能：**
-- 管理状态效果的添加、移除和堆叠
-- 实现状态效果的持续时间和效果
-- 提供状态效果的UI显示
-- 支持状态效果与伤害系统的交互（如护盾吸收伤害）
+**定义：** 每个动作的具体执行逻辑
 
-**状态效果类型：**
-- `ArmorStatus` - 护盾效果，吸收一定比例的伤害
-- `BurnStatus` - 灼烧效果，持续造成伤害
+**代码位置：** 各 System 类的 OnEnable 方法
 
-**工作流程：**
-1. 通过 `AddStatusEffectEffect` 添加状态效果
-2. 状态效果系统管理效果的持续时间和堆叠
-3. UI系统显示当前激活的状态效果
-4. 伤害系统与状态效果系统交互（如护盾吸收伤害）
+---
 
-#### 6. 敌人策略系统 (Enemy Strategy System)
+## 各模块详解
 
-敌人策略系统实现了敌人的AI行为，采用策略模式设计，支持多种不同的敌人行为策略。
+### 1. GameActions（动作定义）
 
-**核心组件：**
-- `IEnemyStrategy` - 敌人策略接口
-- `DefaultEnemyStrategy` - 默认敌人策略
-- `ShieldEnemyStrategy` - 护盾优先策略
-- `CardReleaseDecision` - 卡牌释放决策模型
+存放所有 `GameAction` 子类，定义**做什么**。
 
-**策略模式设计：**
-- **接口定义**：`IEnemyStrategy` 定义了策略的统一接口
-- **具体策略**：不同的策略类实现具体的AI行为逻辑
-- **上下文**：`EnemyView` 作为策略的上下文，负责调用策略
+| 文件 | 说明 |
+|------|------|
+| `CastCardGA.cs` | 玩家开始释放卡牌 |
+| `CastSuccessGA.cs` | 卡牌释放完成 |
+| `PlayCardGA.cs` | 卡牌效果执行 |
+| `DealDamageGA.cs` | 单目标伤害 |
+| `AttackGA.cs` | 多目标攻击 |
+| `KillEnemyGA.cs` | 敌人死亡 |
+| `WinGameGA.cs` / `LoseGameGA.cs` | 战斗结束 |
+| `SceneChangeGA.cs` | 切换场景 |
 
-**策略优先级逻辑（ShieldEnemyStrategy）：**
-1. **第一优先级**：如果场上没有护盾卡牌，优先释放护盾卡牌
-2. **第二优先级**：如果场上卡牌数量不足3个，优先释放持续伤害卡牌
-3. **第三优先级**：释放其他非护盾卡牌
+**代码位置：** `Assets/_Scripts/BattleScene/GameActions/`
 
-**目标选择机制：**
-- 攻击卡牌：目标为玩家本体
-- 护盾卡牌：目标为敌人本体
-- 通过 `CardReleaseDecision` 封装卡牌索引和目标信息
+---
 
-**卡牌识别逻辑：**
-- **护盾卡牌**：`AddStatusEffectEffect` 且 `StatusEffect` 为 `ArmorStatus`
-- **攻击卡牌**：`DealDamageEffect` 或 `DealOnceDamageEffect`
-- **持续伤害卡牌**：`DealDamageEffect`
+### 2. Systems（系统处理器）
 
-## 关键设计模式
+实现各个 Performer，定义**怎么做**。
 
-### 1. 单例模式 (Singleton)
+| 系统 | 职责 | 关键文件 |
+|------|------|----------|
+| CardSystem | 卡牌生命周期 | `CardSystem.cs` |
+| DamageSystem | 伤害处理 | `DamageSystem.cs` |
+| EnemySystem | 敌人和AI | `EnemySystem.cs` |
+| TimeSystem | 动作队列 | `TimeSystem.cs` |
+| StatusEffectSystem | 状态效果 | `StatusEffectSystem.cs` |
+| MatchSetupSystem | 战斗初始化/结束 | `MatchSetupSystem.cs` |
+| HeroSystem | 英雄管理 | `HeroSystem.cs` |
+| ManaSystem | 法力管理 | `ManaSystem.cs` |
+| BurnSystem | 灼烧效果 | `BurnSystem.cs` |
+| ManualTargetSystem | 手动选择目标 | `ManualTargetSystem.cs` |
 
-多个核心系统（如 `ActionSystem` 和 `TimeSystem`）采用单例模式实现，确保全局只有一个实例，便于访问和管理。
+**代码位置：** `Assets/_Scripts/BattleScene/Systems/`
 
-**核心特性：**
-- 继承 `Singleton<T>` 基类
+---
+
+### 3. Effects（卡牌效果）
+
+定义卡牌的具体效果，实现 `Effect` 接口。
+
+| 效果 | 说明 |
+|------|------|
+| `DealDamageEffect` | 造成伤害 |
+| `DealOnceDamageEffect` | 一次性伤害 |
+| `DrawCardsEffect` | 抽牌 |
+| `AddStatusEffectEffect` | 添加状态效果 |
+| `DestroySelfEffect` | 销毁自身 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Effects/`
+
+---
+
+### 4. Models（业务模型）
+
+核心业务逻辑类。
+
+| 模型 | 说明 |
+|------|------|
+| `Card.cs` | 卡牌业务模型，管理状态和效果 |
+| `Effect.cs` | 效果基类 |
+| `StatusEffect.cs` | 状态效果基类 |
+| `TargetMode.cs` | 目标选择模式基类 |
+| `AutoTargetEffect.cs` | 自动目标效果 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Models/`
+
+---
+
+### 5. Views（视图组件）
+
+负责视觉表现，继承 `MonoBehaviour`。
+
+| 组件 | 说明 |
+|------|------|
+| `CardView.cs` | 卡牌视图 |
+| `CardsView.cs` | 卡牌组视图（手牌/战场） |
+| `EnemyView.cs` | 敌人视图 |
+| `HeroView.cs` | 英雄视图 |
+| `DamagePopup.cs` | 伤害数字弹出 |
+| `TimeLineView.cs` | 时间轴视图 |
+| `CombatantView.cs` | 战斗者基类 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Views/`
+
+---
+
+### 6. Data（数据资源）
+
+数据模型，通常为 ScriptableObject。
+
+| 数据 | 说明 |
+|------|------|
+| `CardData.cs` | 卡牌数据 |
+| `EnemyData.cs` | 敌人数据 |
+| `HeroData.cs` | 英雄数据 |
+| `PerkData.cs` | 天赋数据 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Data/`
+
+---
+
+### 7. Interfaces（接口定义）
+
+定义规范。
+
+| 接口 | 说明 |
+|------|------|
+| `Damageable.cs` | 可受伤接口（敌人/英雄） |
+| `IEnemyStrategy.cs` | 敌人策略接口 |
+| `IHaveCaster.cs` | 施法者接口 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Interfaces/`
+
+---
+
+### 8. StatusEffects（状态效果实现）
+
+具体的状态效果类。
+
+| 效果 | 说明 |
+|------|------|
+| `ArmorStatus.cs` | 护盾，吸收伤害 |
+| `BurnStatus.cs` | 灼烧，持续伤害 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/StatusEffects/`
+
+---
+
+### 9. Strategies（敌人AI策略）
+
+实现不同的敌人行为模式。
+
+| 策略 | 说明 |
+|------|------|
+| `DefaultEnemyStrategy.cs` | 默认策略 |
+| `ShieldEnemyStrategy.cs` | 护盾优先策略 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Strategies/`
+
+---
+
+### 10. TargetModes（目标选择模式）
+
+定义如何选择目标。
+
+| 模式 | 说明 |
+|------|------|
+| `HeroTM.cs` | 玩家本体 |
+| `AllEnemyTM.cs` | 所有敌人 |
+| `RandomEnemyTM.cs` | 随机敌人 |
+| `ManualTM.cs` | 手动选择 |
+| `NoTM.cs` | 无目标 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/TargetModes/`
+
+---
+
+### 11. Creators（对象创建器）
+
+负责动态创建游戏对象。
+
+| 创建器 | 说明 |
+|--------|------|
+| `CardViewCreator.cs` | 创建卡牌视图 |
+| `EnemyViewCreator.cs` | 创建敌人视图 |
+| `DamagePopupManager.cs` | 管理伤害数字池 |
+| `TimeSlotCreator.cs` | 创建时间槽 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/Creators/`
+
+---
+
+### 12. UI（用户界面）
+
+UI 组件。
+
+| 组件 | 说明 |
+|------|------|
+| `ManaUI.cs` | 法力值UI |
+| `StatusEffectsUI.cs` | 状态效果图标 |
+| `PauseContinueButton.cs` | 暂停/继续按钮 |
+| `PerkUI.cs` / `PerksUI.cs` | 天赋UI |
+
+**代码位置：** `Assets/_Scripts/BattleScene/UI/`
+
+---
+
+### 13. General（核心框架）
+
+| 组件 | 说明 |
+|------|------|
+| `ActionSystem.cs` | 动作系统核心 |
+| `GameAction.cs` | 动作基类 |
+| `ReactionTiming.cs` | 反应时机枚举 |
+| `MovementTracker.cs` | 移动追踪（DOTween辅助） |
+| `Singleton.cs` | 单例基类 |
+
+**代码位置：** `Assets/_Scripts/BattleScene/General/`
+
+---
+
+## 战斗流程示例
+
+### 玩家使用卡牌攻击敌人
+
+```
+1. 玩家点击卡牌
+   ↓
+2. 创建 CastCardGA
+   ↓
+3. TimeSystem.AddAction(CastCardGA, 0)
+   ↓ 立即执行
+4. CastCardGA.Performer (CardSystem)
+   ├─ 从手牌移除
+   ├─ ActionSystem.AddReaction(SpendManaGA)
+   └─ TimeSystem.AddAction(CastSuccessGA, card.CastTime)
+   ↓ 等待释放时间...
+5. CastSuccessGA.Performer
+   └─ TimeSystem.AddAction(PlayCardGA, 0)
+   ↓
+6. PlayCardGA.Performer (CardSystem)
+   └─ 创建 DealDamageGA
+   ↓
+7. DealDamageGA 执行：
+   ├─ PRE: ProtectBeforeDamage（StatusEffectSystem）
+   ├─ Performer: 伤害+动画（DamageSystem）
+   │       ↓
+   │    敌人血量<=0 → KillEnemyGA
+   └─ POST: ProtectAfterDamage
+   ↓
+8. KillEnemyGA.Performer (EnemySystem)
+   ├─ 销毁敌人卡牌
+   ├─ 敌人缩放动画 → 等待 → 销毁
+   └─ TimeSystem.AddAction(WinGameGA, 0)
+   ↓
+9. WinGameGA.Performer (MatchSetupSystem)
+   ├─ ClearAllActions()
+   ├─ 重置游戏状态
+   ├─ ResumeTimeGA
+   └─ SceneChangeGA
+```
+
+---
+
+## 代码查找指南
+
+### 想添加新卡牌效果？
+1. **效果类** → `Assets/_Scripts/BattleScene/Effects/`
+2. **卡牌数据** → `Assets/_Scripts/BattleScene/Data/CardData.cs`
+
+### 想修改敌人AI？
+1. **策略接口** → `Assets/_Scripts/BattleScene/Interfaces/IEnemyStrategy.cs`
+2. **策略实现** → `Assets/_Scripts/BattleScene/Strategies/`
+3. **敌人系统** → `Assets/_Scripts/BattleScene/Systems/EnemySystem.cs`
+
+### 想添加新状态效果？
+1. **效果基类** → `Assets/_Scripts/BattleScene/Models/StatusEffect.cs`
+2. **效果实现** → `Assets/_Scripts/BattleScene/StatusEffects/`
+3. **效果系统** → `Assets/_Scripts/BattleScene/Systems/StatusEffectSystem.cs`
+
+### 想添加新动作？
+1. **定义动作** → `Assets/_Scripts/BattleScene/GameActions/`
+2. **注册处理器** → 对应 System 类的 `OnEnable`
+3. **实现逻辑** → Performer 方法
+
+### 想添加新目标选择模式？
+- **基类** → `Assets/_Scripts/BattleScene/Models/TargetMode.cs`
+- **实现** → `Assets/_Scripts/BattleScene/TargetModes/`
+
+### 想修改战斗结束流程？
+- **战斗初始化** → `Assets/_Scripts/BattleScene/Systems/MatchSetupSystem.cs`
+- **时间系统** → `Assets/_Scripts/BattleScene/Systems/TimeSystem.cs`
+
+### 想修改UI显示？
+- **卡牌视图** → `Assets/_Scripts/BattleScene/Views/CardView.cs`
+- **卡牌组** → `Assets/_Scripts/BattleScene/Views/CardsView.cs`
+- **UI组件** → `Assets/_Scripts/BattleScene/UI/`
+
+---
+
+## 关键设计规范
+
+### 1. 动作必须通过 TimeSystem 执行
+
+```csharp
+// 正确
+TimeSystem.Instance.AddAction(new WinGameGA(), 0f);
+
+// 错误（直接执行可能打乱顺序）
+ActionSystem.Instance.Perform(new WinGameGA());
+```
+
+### 2. 战斗结束必须恢复时间
+
+```csharp
+// WinGameGA.Performer 中
+TimeSystem.Instance.AddAction(new ResumeTimeGA(), 0f);
+```
+
+### 3. DOTween 清理
+
+```csharp
+// 方法1：等待动画完成
+transform.DOScale(Vector3.zero, 0.25f);
+yield return new WaitForSeconds(0.25f);
+transform.DOKill();
+Destroy(gameObject);
+
+// 方法2：OnDestroy 中清理
+private void OnDestroy()
+{
+    transform.DOKill();
+}
+
+// 方法3：场景切换时清理
+DOTween.KillAll();
+DOTween.Clear(true);
+
+// 战斗场景开始时
+DOTween.Clear(true);
+```
+
+### 4. 单例模式
+
+核心系统继承 `Singleton<T>`：
 - 场景切换时自动销毁和重建
-- 通过反射自动查找为 null 的 SerializeField 引用（`AutoFindSerializedFields`）
-- 支持动态创建和查找已有实例
-
-### 2. 事件驱动模式 (Event-Driven)
-
-动作系统基于事件驱动架构，通过 `GameAction` 作为事件载体，实现组件间的解耦通信。
-
-### 3. 协程异步模式 (Coroutine Asynchronous)
-
-大量使用 Unity 协程实现异步操作，特别是在动作执行和时间管理方面，确保游戏流畅运行。
-
-### 4. 命令模式 (Command Pattern)
-
-`GameAction` 系统本质上是命令模式的实现，将游戏操作封装为对象，支持排队、延迟执行和撤销等操作。
-
-### 5. 策略模式 (Strategy Pattern)
-
-敌人策略系统采用策略模式设计，允许动态切换敌人的AI行为策略。
-
-### 6. 场景系统 (Scene System)
-
-游戏包含多个场景，通过场景切换实现不同的游戏状态。
-
-**核心组件：**
-- `BattleScene` - 战斗场景，主游戏界面
-- `GameVictoryScene` - 胜利场景，玩家获胜后显示
-- `GameDefeatScene` - 失败场景，玩家失败后显示
-
-**场景切换机制：**
-- 通过 `SceneChangeGA` 动作进行场景切换，实现解耦
-- 使用 `WinGameGA` 动作触发胜利场景切换
-- 使用 `LoseGameGA` 动作触发失败场景切换
-- 战斗结束时自动恢复时间（通过 `ResumeTimeGA`）
-- 返回按钮使用 `ReturnButton` 脚本实现返回战斗场景
-
-**战斗结束流程：**
-1. 触发 `WinGameGA` 或 `LoseGameGA`
-2. 清空时间系统动作，重置游戏状态
-3. 添加 `ResumeTimeGA` 恢复时间
-4. 添加 `SceneChangeGA` 延迟切换场景
-5. 场景切换前确保 DOTween 动画完成（通过 `OnDestroy` 和 `DOKill`）
-
-**DOTween 清理规范：**
-- 在 `RemoveEnemy` 中等待动画完成后调用 `DOKill`
-- 在 `Damageable` 基类中重写 `OnDestroy` 自动清理 tween
-- 销毁对象前确保所有 tween 已完成或已 kill
-
-**工作流程：**
-1. 战斗胜利时触发 `WinGameGA` → 执行 SceneChangeGA("GameVictoryScene")
-2. 战斗失败时触发 `LoseGameGA` → 执行 SceneChangeGA("GameDefeatScene")
-3. 点击返回按钮 → 切换回 BattleScene
-
-**实现方式：**
-- **策略接口**：`IEnemyStrategy` 定义了统一的策略接口
-- **具体策略**：不同的策略类（如 `DefaultEnemyStrategy`、`ShieldEnemyStrategy`）实现具体的AI逻辑
-- **上下文**：`EnemyView` 作为策略的上下文，通过策略接口调用具体策略
-
-**优势：**
-- 支持动态切换敌人行为策略
-- 易于扩展新的策略类型
-- 策略逻辑独立，便于维护和测试
-
-## 核心工作流程
-
-### 卡牌使用流程
-
-1. 玩家选择手牌中的卡牌
-2. 系统创建并执行 `PlayCardGA` 动作
-3. 检查并执行卡牌的释放时间（通过 `TimeSystem` 管理）
-4. 释放时间结束后，创建并执行 `CastSuccessGA` 动作
-5. 执行卡牌的具体效果（如伤害、治疗等）
-6. 根据效果创建并执行相应的动作（如 `DealDamageGA`）
-
-### 时间系统工作流程
-
-1. 向 `TimeSystem` 添加带倒计时的动作
-2. 系统按倒计时排序动作队列
-3. 更新所有动作的倒计时
-4. 当动作倒计时结束时：
-   - 暂停时间流
-   - 执行该动作（使用 `PerformAndWait` 确保完成）
-   - 移除已执行的动作
-   - 继续执行下一个到期的动作
-   - 所有到期动作执行完成后恢复时间流
-
-### 状态效果系统工作流程
-
-1. **状态效果添加**：
-   - 通过 `AddStatusEffectEffect` 效果添加状态效果
-   - 系统检查目标是否已有相同类型的效果
-   - 如果已有，增加堆叠数；如果没有，添加新效果
-
-2. **状态效果显示**：
-   - `StatusEffectsUI` 组件监听状态效果变化
-   - 根据状态效果类型显示对应的图标和堆叠数
-   - 当堆叠数为0时自动移除UI显示
-
-3. **状态效果交互**：
-   - 伤害系统在造成伤害前检查目标的状态效果
-   - 护盾效果会吸收一定比例的伤害
-   - 灼烧效果会在特定时机造成持续伤害
-
-**护盾系统说明：**
-- `ArmorStatus` 定义护盾的吸收比例（默认 80%）
-- `ProtectBeforeDamage` (PRE Reaction)：护盾移动到目标位置，计算吸收伤害，创建护盾受伤的 DealDamageGA
-- `ProtectAfterDamage` (POST Reaction)：护盾返回原位
-- 护盾受伤可能触发连锁反应（护盾死亡 → DestroyCardViewGA）
-
-### 敌人策略系统工作流程
-
-1. **策略选择阶段**：
-   - `EnemyView` 调用当前策略的 `SelectCardToRelease` 方法
-   - 策略根据优先级逻辑选择卡牌和目标
-   - 返回 `CardReleaseDecision` 包含卡牌索引和目标信息
-
-2. **卡牌执行阶段**：
-   - `EnemySystem` 根据 `CardReleaseDecision` 执行卡牌
-   - 使用断言确保 `ManualTargetEffect` 必须设置目标对象
-   - 根据卡牌类型选择正确的目标模式
-
-3. **目标选择机制**：
-   - 策略负责设置 `card.ManualTarget` 属性
-   - `EnemySystem` 使用 `ManualTM` 目标模式执行卡牌
-   - 确保攻击卡牌攻击玩家，护盾卡牌保护敌人
-
-## 开发规范
-
-1. **代码风格**：采用 PascalCase 命名类和方法，camelCase 命名变量
-2. **模块化设计**：每个功能模块独立封装，降低耦合度
-3. **单例使用**：仅核心系统使用单例，其他组件通过依赖注入获取引用
-4. **单例设计**：所有单例继承 `Singleton<T>` 基类，支持场景切换时自动销毁和重建；通过反射自动查找为 null 的 SerializeField 引用
-5. **动作系统使用**：所有游戏事件和交互必须通过动作系统处理
-6. **时间管理**：需要计时的操作必须通过时间系统管理
-7. **空值检查**：对于可能被销毁的对象（如场景切换后），使用 null 检查或 try-catch 防止 MissingReferenceException
-
-## 扩展建议
-
-1. **添加新动作**：创建新的 `GameAction` 子类并注册相应的处理器
-2. **添加新效果**：继承 `Effect` 类实现新的效果逻辑
-3. **添加新卡牌**：创建新的 `CardData` 资源并配置相应的效果
-4. **扩展时间系统**：可以添加时间流速控制、暂停状态保存等功能
-5. **添加新场景**：可以添加新的场景（如主菜单、设置界面等），参考现有的场景系统实现
-
-## 总结
-
-Cultivation Road 采用模块化、事件驱动的架构设计，具有良好的扩展性和可维护性。动作系统和时间系统构成了游戏的核心框架，为卡牌战斗提供了灵活而强大的支持。
+- 通过反射自动查找 null 的 SerializeField
