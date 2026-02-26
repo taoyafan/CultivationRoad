@@ -13,6 +13,8 @@ public class CardSystem : Singleton<CardSystem>
     [SerializeField] private TMP_Text drawPileCountText;
     [SerializeField] private TMP_Text waitPileCountText;
     [SerializeField] private TMP_Text deadPileCountText;
+    [SerializeField] private float drawInterval = 3f;
+    [SerializeField] private int maxHandSize = 10;
 
     public CardsView heroCardsView;
     private readonly List<Card> drawPile = new();
@@ -35,6 +37,9 @@ public class CardSystem : Singleton<CardSystem>
         {
             Debug.LogError("CardSystem.Setup: HeroSystem or HeroView is null!");
         }
+
+        TimeSystem.Instance.AddAction(new DrawCardsGA(8), 0f);
+        TimeSystem.Instance.AddAction(new DrawCardsGA(1, DrawReason.Timed), drawInterval);
     }
 
     public void ResetCards()
@@ -102,7 +107,16 @@ public class CardSystem : Singleton<CardSystem>
     /// </summary>
     private IEnumerator DrawCardsPerformer(DrawCardsGA drawCardsGA)
     {
-        int actualAmount = Mathf.Min(drawCardsGA.Amount, drawPile.Count);
+        if (hand.Count >= maxHandSize)
+        {
+            if (drawCardsGA.Reason == DrawReason.Timed)
+            {
+                TimeSystem.Instance.AddAction(new DrawCardsGA(1, DrawReason.Timed), drawInterval);
+            }
+            yield break;
+        }
+
+        int actualAmount = Mathf.Min(drawCardsGA.Amount, drawPile.Count, maxHandSize - hand.Count);
         int notDrawnAmount = drawCardsGA.Amount - actualAmount;
         
         for (int i = 0; i < actualAmount; i++)
@@ -117,9 +131,16 @@ public class CardSystem : Singleton<CardSystem>
 
         for (int i = 0; i < notDrawnAmount; i++)
         {
+            if (hand.Count >= maxHandSize) break;
             yield return DrawCard();
         }
 
+        UpdatePileCounts();
+
+        if (drawCardsGA.Reason == DrawReason.Timed)
+        {
+            TimeSystem.Instance.AddAction(new DrawCardsGA(1, DrawReason.Timed), drawInterval);
+        }
     }
     
     /// <summary>

@@ -7,6 +7,6 @@ public class DrawCardsEffect : Effect
     [SerializeField] private int _drawCount;
     public override GameAction GetGameAction(List<Damageable> targets, CardView caster)
     {
-        return new DrawCardsGA(_drawCount);
+        return new DrawCardsGA(_drawCount, DrawReason.CardEffect);
     }
 }

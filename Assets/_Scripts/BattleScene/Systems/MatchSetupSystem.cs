@@ -38,8 +38,6 @@ public class MatchSetupSystem : MonoBehaviour
         EnemySystem.Instance.Setup(enemyDatas);
         CardSystem.Instance.Setup(heroData.Deck);
         ManaSystem.Instance.Setup();
-
-        TimeSystem.Instance.AddAction(new DrawCardsGA(10), 0f);
     }
 
     private IEnumerator WinGameGAPerformer(WinGameGA winGameGA)
