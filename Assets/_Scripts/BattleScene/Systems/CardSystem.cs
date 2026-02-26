@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using DG.Tweening;
 
@@ -7,11 +8,16 @@ public class CardSystem : Singleton<CardSystem>
 {
     public CardsView HandView;
     [SerializeField] private Transform drawPilePoint;
-    [SerializeField] private Transform discardPilePoint;
+    [SerializeField] private Transform waitPilePoint;
+
+    [SerializeField] private TMP_Text drawPileCountText;
+    [SerializeField] private TMP_Text waitPileCountText;
+    [SerializeField] private TMP_Text deadPileCountText;
 
     public CardsView heroCardsView;
     private readonly List<Card> drawPile = new();
-    private readonly List<Card> discardPile = new();
+    private readonly List<Card> waitPile = new();
+    private readonly List<Card> deadPile = new();
     private readonly List<Card> hand = new();
     
     public void Setup(List<CardData> deckData)
@@ -37,7 +43,8 @@ public class CardSystem : Singleton<CardSystem>
         heroCardsView?.ClearCards();
         hand.Clear();
         drawPile.Clear();
-        discardPile.Clear();
+        waitPile.Clear();
+        deadPile.Clear();
     }
 
     private void OnEnable()
@@ -192,9 +199,10 @@ public class CardSystem : Singleton<CardSystem>
     private IEnumerator DiscardCard(CardView cardView)
     {
         // 弃牌堆添加卡牌
-        discardPile.Add(cardView.Card);
+        waitPile.Add(cardView.Card);
+        UpdatePileCounts();
         cardView.transform.DOScale(Vector3.zero, 0.15f);
-        Tween tween = cardView.transform.DOMove(discardPilePoint.position, 0.15f);
+        Tween tween = cardView.transform.DOMove(waitPilePoint.position, 0.15f);
         yield return tween.WaitForCompletion();
         Destroy(cardView.gameObject);
     }
@@ -205,8 +213,9 @@ public class CardSystem : Singleton<CardSystem>
     private void RefillDeck()
     {
         // 将弃牌堆的所有卡牌添加到牌堆
-        drawPile.AddRange(discardPile);
-        discardPile.Clear();
+        drawPile.AddRange(waitPile);
+        UpdatePileCounts();
+        waitPile.Clear();
         
         // 随机打乱牌堆
         for (int i = drawPile.Count - 1; i > 0; i--)
@@ -223,6 +232,7 @@ public class CardSystem : Singleton<CardSystem>
         {
             // 从牌堆顶部抽取一张卡牌
             Card drawnCard = drawPile.Draw();
+            UpdatePileCounts();
             
             // 添加到玩家手牌
             hand.Add(drawnCard);
@@ -374,6 +384,8 @@ public class CardSystem : Singleton<CardSystem>
             TimeSystem.Instance.CleanWhenObjectDies(destroyCardViewGA.CardView);
             // 然后销毁卡牌游戏对象
             Destroy(destroyCardViewGA.CardView.gameObject);
+            deadPile.Add(card);
+            UpdatePileCounts();
         }
         else
         {
@@ -382,5 +394,20 @@ public class CardSystem : Singleton<CardSystem>
         yield return null;
     }
 
+    private void UpdatePileCounts()
+    {
+        if (drawPileCountText != null)
+        {
+            drawPileCountText.text = drawPile.Count.ToString();
+        }
+        if (waitPileCountText != null)
+        {
+            waitPileCountText.text = waitPile.Count.ToString();
+        }
+        if (deadPileCountText != null)
+        {
+            deadPileCountText.text = deadPile.Count.ToString();
+        }
+    }
 
 }
