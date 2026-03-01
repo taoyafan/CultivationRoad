@@ -78,7 +78,10 @@ public class DamageSystem : Singleton<DamageSystem>
 
     private IEnumerator AttackPerform(AttackGA attackGA)
     {
-        attackGA.OriginalPosition = attackGA.Caster.transform.position;
+        if (attackGA.Caster != null && attackGA.Caster.gameObject != null)
+        {
+            attackGA.OriginalPosition = attackGA.Caster.transform.position;
+        }
         foreach (Damageable target in attackGA.Targets)
         {
             DealDamageGA deal = new DealDamageGA(attackGA.Amount, target, attackGA.Caster);
