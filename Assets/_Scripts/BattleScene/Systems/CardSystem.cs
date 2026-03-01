@@ -62,6 +62,7 @@ public class CardSystem : Singleton<CardSystem>
         ActionSystem.AttachPerformer<DrawCardsGA>(DrawCardsPerformer);
         ActionSystem.AttachPerformer<DiscardAllCardsGA>(DiscardAllCardsPerformer);
         ActionSystem.AttachPerformer<DestroyCardViewGA>(DestroyCardViewPerformer);
+        ActionSystem.AttachPerformer<MoveToCoolDownGA>(MoveToCoolDownPerformer);
 
         ActionSystem.SubscribeReaction<PauseTimeGA>(PauseTimeReaction, ReactionTiming.POST);
         ActionSystem.SubscribeReaction<ResumeTimeGA>(ResumeTimeReaction, ReactionTiming.POST);
@@ -77,6 +78,7 @@ public class CardSystem : Singleton<CardSystem>
         ActionSystem.DetachPerformer<DrawCardsGA>();
         ActionSystem.DetachPerformer<DiscardAllCardsGA>();
         ActionSystem.DetachPerformer<DestroyCardViewGA>();
+        ActionSystem.DetachPerformer<MoveToCoolDownGA>();
 
         ActionSystem.UnsubscribeReaction<PauseTimeGA>(PauseTimeReaction, ReactionTiming.POST);
         ActionSystem.UnsubscribeReaction<ResumeTimeGA>(ResumeTimeReaction, ReactionTiming.POST);
@@ -429,6 +431,63 @@ public class CardSystem : Singleton<CardSystem>
         {
             deadPileCountText.text = deadPile.Count.ToString();
         }
+    }
+
+    /// <summary>
+    /// 将卡牌移动到冷却区动作的处理器
+    /// </summary>
+    private IEnumerator MoveToCoolDownPerformer(MoveToCoolDownGA moveToCoolDownGA)
+    {
+        if (moveToCoolDownGA.CardView != null)
+        {
+            // 保存引用
+            CardView cardView = moveToCoolDownGA.CardView;
+            Card card = cardView.Card;
+            CardsView cardsView = cardView.CardsView;
+            
+            // 从CardView所在的CardsView中移除
+            if (cardsView != null)
+            {
+                cardsView.RemoveCardView(cardView);
+                // 等待卡牌重分布完成
+                yield return cardsView.WaitForCardQueueToComplete();
+            }
+            
+            // 获取Card对象
+            if (card != null)
+            {
+                // 移除卡牌与视图的关联
+                card.CardView = null;
+                
+                // 添加到冷却区
+                waitPile.Add(card);
+                UpdatePileCounts();
+                
+                // 播放移动动画
+                if (cardView != null && cardView.gameObject != null)
+                {
+                    cardView.transform.DOScale(Vector3.zero, 0.15f);
+                    if (waitPilePoint != null)
+                    {
+                        Tween tween = cardView.transform.DOMove(waitPilePoint.position, 0.15f);
+                        yield return tween.WaitForCompletion();
+                    }
+                    else
+                    {
+                        // 如果waitPilePoint未赋值，直接等待一小段时间
+                        yield return new WaitForSeconds(0.15f);
+                    }
+                    
+                    // 销毁卡牌视图
+                    Destroy(cardView.gameObject);
+                }
+            }
+        }
+        else
+        {
+            Debug.LogError($"MoveToCoolDownPerformer: CardView is null, cannot move to cool down");
+        }
+        yield return null;
     }
 
 }
