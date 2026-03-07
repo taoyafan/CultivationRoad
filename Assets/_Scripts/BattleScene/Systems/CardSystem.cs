@@ -63,6 +63,7 @@ public class CardSystem : Singleton<CardSystem>
         ActionSystem.AttachPerformer<DiscardAllCardsGA>(DiscardAllCardsPerformer);
         ActionSystem.AttachPerformer<DestroyCardViewGA>(DestroyCardViewPerformer);
         ActionSystem.AttachPerformer<MoveToCoolDownGA>(MoveToCoolDownPerformer);
+        ActionSystem.AttachPerformer<CooldownCompleteGA>(CooldownCompletePerformer);
 
         ActionSystem.SubscribeReaction<PauseTimeGA>(PauseTimeReaction, ReactionTiming.POST);
         ActionSystem.SubscribeReaction<ResumeTimeGA>(ResumeTimeReaction, ReactionTiming.POST);
@@ -79,6 +80,7 @@ public class CardSystem : Singleton<CardSystem>
         ActionSystem.DetachPerformer<DiscardAllCardsGA>();
         ActionSystem.DetachPerformer<DestroyCardViewGA>();
         ActionSystem.DetachPerformer<MoveToCoolDownGA>();
+        ActionSystem.DetachPerformer<CooldownCompleteGA>();
 
         ActionSystem.UnsubscribeReaction<PauseTimeGA>(PauseTimeReaction, ReactionTiming.POST);
         ActionSystem.UnsubscribeReaction<ResumeTimeGA>(ResumeTimeReaction, ReactionTiming.POST);
@@ -444,6 +446,7 @@ public class CardSystem : Singleton<CardSystem>
             CardView cardView = moveToCoolDownGA.CardView;
             Card card = cardView.Card;
             CardsView cardsView = cardView.CardsView;
+            float coolDownTime = moveToCoolDownGA.CoolDownTime;
             
             // 从CardView所在的CardsView中移除
             if (cardsView != null)
@@ -462,6 +465,13 @@ public class CardSystem : Singleton<CardSystem>
                 // 添加到冷却区
                 waitPile.Add(card);
                 UpdatePileCounts();
+                
+                // 提交冷却完成GA到TimeSystem
+                if (coolDownTime > 0)
+                {
+                    CooldownCompleteGA cooldownCompleteGA = new(card);
+                    TimeSystem.Instance.AddAction(cooldownCompleteGA, coolDownTime);
+                }
                 
                 // 播放移动动画
                 if (cardView != null && cardView.gameObject != null)
@@ -486,6 +496,21 @@ public class CardSystem : Singleton<CardSystem>
         else
         {
             Debug.LogError($"MoveToCoolDownPerformer: CardView is null, cannot move to cool down");
+        }
+        yield return null;
+    }
+
+    /// <summary>
+    /// 冷却完成动作的处理器 - 将卡牌从waitPile移动到drawPile
+    /// </summary>
+    private IEnumerator CooldownCompletePerformer(CooldownCompleteGA cooldownCompleteGA)
+    {
+        Card card = cooldownCompleteGA.Card;
+        if (card != null && waitPile.Contains(card))
+        {
+            waitPile.Remove(card);
+            drawPile.Add(card);
+            UpdatePileCounts();
         }
         yield return null;
     }
